@@ -1,0 +1,62 @@
+# Author : Andrew Christ
+# Email : andrew@openmarmot.com
+# Last Updated : May 08 2020
+#
+# to run on the host list file in the same directory :
+# ansible-playbook amazonlinux2-k3s.yml -i hosts
+#
+# Notes:
+# Setup k3s master and node(s)
+# Source server is the default Amazon Linux 2 AMI in AWS
+
+# troubleshooting
+# k3s install will fail on amazon linux 1. needs to be amazon linux 2
+
+# Reference
+
+
+- name: Setup k3s master and nodes on Amazon Linux 2
+  hosts: k3s-master:k3s-nodes
+  remote_user: ec2-user
+  become: yes
+  become_method: sudo
+  tasks:
+
+    - name: install all updates from yum
+      yum: name=* state=latest
+
+    - name: Download k3s install script
+      get_url:
+        url: https://raw.githubusercontent.com/rancher/k3s/master/install.sh
+        dest: /tmp/install.sh
+        mode: '0700'
+
+    - name: install k3s on the master
+      when: inventory_hostname in groups['k3s-master']
+      command: "/tmp/install.sh"
+      
+    - name: chown k3s file so kubectl works from the regular user
+      when: inventory_hostname in groups['k3s-master']
+      file:
+        path: /etc/rancher/k3s/k3s.yaml
+        owner: "{{ ansible_user }}"
+        
+    - name: get k3s node token from master
+      when: inventory_hostname in groups['k3s-master']
+      command: "cat /var/lib/rancher/k3s/server/node-token"
+      register: get_node_token
+      
+    # register runs no matter what, so this is a way to set the variable per host
+    # so it isn't just overwritten by the nodes
+    - set_fact: node_token={{get_node_token.stdout}}
+      when: get_node_token.changed
+        
+    - name: install k3s on the nodes
+      when: inventory_hostname in groups['k3s-nodes']
+      shell:
+        argv:
+          - "K3S_URL=https://{{ hostvars[groups['k3s-master'][0]]['ansible_eth0']['ipv4']['address'] }}:6443"
+          - "K3S_TOKEN={{ hostvars[groups['k3s-master'][0]]['node_token'] }}"
+          - /tmp/install.sh
+      
+
