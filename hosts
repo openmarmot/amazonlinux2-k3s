@@ -1,0 +1,8 @@
+# update IP addresses with the correct ones
+# note that you can add as many nodes as you want
+
+[k3s-master]
+k3s-master1 ansible_ssh_host=10.x.x.x
+
+[k3s-nodes]
+k3s-node1 ansible_ssh_host=10.x.x.x
